@@ -1,0 +1,6 @@
+{
+  "name": "Silent Explorers: NASA’s Left-Behind Machines",
+  "description": "An interactive 3D solar-system explorer and story-driven educational experience chronicling the NASA rovers, landers, experiments, and deep-space probes left behind across the Moon, Mars, and beyond.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
