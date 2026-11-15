@@ -1100,42 +1100,130 @@ a:hover .so-mail-u {
   color: rgb(255, 255, 255);
 }
 
-@media (max-width: 760px) {
-  .jehad-hs-main {
-    left: var(--m);
-    right: var(--m);
-    bottom: 22vh;
-    max-width: none;
+@media (max-width: 1080px) {
+  .jehad-pill-link,
+  .pill-link {
+    display: none;
   }
-  .jehad-hs-name {
-    font-size: 36px;
+  .jehad-pill-menu,
+  .pill-menu {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .jehad-hero-statement {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 76px var(--m) 82px;
+  }
+  .jehad-hs-main {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    max-width: 640px;
+    width: 100%;
   }
   .jehad-hs-side {
-    left: var(--m);
-    right: var(--m);
-    bottom: 7vh;
-    max-width: none;
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    max-width: 560px;
+    width: 100%;
     text-align: left;
   }
   .jehad-hs-tag,
   .jehad-hs-does {
     margin-left: 0;
+    max-width: 100%;
   }
   .jehad-beat {
-    left: var(--m);
-    right: var(--m);
-    width: auto;
+    width: min(48vw, 440px);
+  }
+  .jehad-overlay {
+    overflow-y: auto;
+    align-items: flex-start;
+    padding: 80px var(--col) 40px;
   }
   .jehad-overlay-inner {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 28px;
+    margin: auto 0;
   }
-  .jehad-pill-link {
-    display: none;
+  .stone {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
-  .jehad-pill-menu {
-    border-left: 0;
-    padding-left: 0;
+  .stone-role {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 760px) {
+  .jehad-hero-statement {
+    gap: 12px;
+    padding: 68px var(--m) 78px;
+  }
+  .jehad-hs-name {
+    font-size: clamp(28px, 7.8vw, 36px);
+    line-height: 1.02;
+  }
+  .jehad-hs-role {
+    font-size: 10.5px;
+    margin-top: 8px;
+  }
+  .jehad-hs-tag {
+    font-size: clamp(15px, 4.2vw, 18px);
+    margin: 0 0 6px 0;
+  }
+  .jehad-hs-does {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .jehad-hint {
+    left: var(--m);
+    right: auto;
+    margin: 0;
+    bottom: 22px;
+  }
+  .jehad-beat,
+  .jehad-beat.flip-right,
+  .jehad-beat.center-beat {
+    left: var(--m);
+    right: var(--m);
+    bottom: 11vh;
+    width: auto;
+    transform: none;
+  }
+  .jehad-menu-inner {
+    top: 11vh;
+    bottom: 5vh;
+    overflow-y: auto;
+    gap: 20px;
+  }
+  .jehad-chapters li button,
+  .jehad-chapters li a {
+    font-size: clamp(24px, 6.4vw, 36px);
+    line-height: 1.18;
+  }
+  .jehad-rock-block {
+    max-width: min(230px, calc(100vw - 32px));
+    background: rgba(3, 5, 12, 0.72);
+    backdrop-filter: blur(8px);
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+  }
+  .jehad-rock-line {
+    font-size: 12px;
+    max-width: 100%;
+  }
+  .end-btn {
+    padding: 10px 16px;
+    font-size: 10.5px;
   }
 }
 
