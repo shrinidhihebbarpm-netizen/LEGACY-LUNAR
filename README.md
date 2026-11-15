@@ -1,4 +1,4 @@
-# Silent Explorers: NASA’s Left-Behind Machines
+# Legacy Lunar: NASA’s Left-Behind Machines
 
 An interactive 3D solar-system explorer and story-driven astronomy web application chronicling the rovers, landers, space telescopes, scientific experiments, and deep-space probes across the Moon, Mars, the outer planets, and interstellar space.
 
