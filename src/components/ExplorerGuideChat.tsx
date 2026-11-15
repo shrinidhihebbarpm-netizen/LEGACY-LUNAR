@@ -1,5 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, ExternalLink, Compass, Sparkles } from 'lucide-react';
+import {
+  MessageSquare,
+  Send,
+  X,
+  ExternalLink,
+  Compass,
+  Sparkles,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
 import {
   ARTIFACTS,
   DESTINATIONS,
@@ -23,11 +32,11 @@ interface ExplorerGuideChatProps {
 }
 
 const STARTER_QUESTIONS = [
-  'What did Opportunity discover on Mars?',
-  'Why did Apollo leave equipment on the Moon?',
-  'Where are the Voyager spacecraft now?',
-  'What is a descent stage?',
-  'Which Mars missions are still active?',
+  'Tell me about Saturn’s rings.',
+  'What is the James Webb Space Telescope?',
+  'How does the Hubble Telescope work?',
+  'What is a black hole?',
+  'How far is Mars from Earth?',
 ];
 
 export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
@@ -38,11 +47,12 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      text: 'Welcome aboard! I am your Explorer Guide. Ask me about any NASA rover, lander, descent stage, deep-space probe, or planet featured in this solar-system experience.',
+      text: 'Hello, Explorer! I am Space Explorer AI. Ask me anything about planets, moons, stars, black holes, nebulae, space telescopes like Hubble and James Webb, or missions across the universe.',
       sources: [
         {
           title: 'NASA Science Solar System Exploration',
@@ -69,6 +79,10 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
     const trimmed = questionText.trim();
     if (!trimmed || isLoading) return;
 
+    const historySnapshot = messages
+      .slice(-8)
+      .map((m) => ({ role: m.role, text: m.text }));
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -76,6 +90,7 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setErrorNotice(null);
     setIsLoading(true);
 
     try {
@@ -86,14 +101,19 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
           question: trimmed,
           destinationId: selectedDestinationId,
           artifactId: selectedArtifactId,
+          history: historySnapshot,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('API request failed');
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      if (!data?.reply) {
+        throw new Error('Invalid empty reply');
+      }
+
       setMessages((prev) => [
         ...prev,
         {
@@ -106,10 +126,15 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
         },
       ]);
     } catch {
+      const lastUserTopic = [...historySnapshot]
+        .reverse()
+        .find((m) => m.role === 'user')?.text;
       const fallback = buildLocalExplorerGuideAnswer(trimmed, {
         destinationId: selectedDestinationId,
         artifactId: selectedArtifactId,
+        lastTopicText: lastUserTopic,
       });
+      setErrorNotice('Live AI service unreachable right now—answered using verified offline space knowledge.');
       setMessages((prev) => [
         ...prev,
         {
@@ -132,39 +157,44 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
-      {/* Chat Panel styled in NASA Eyes #1D1D20 / #252527 palette */}
+    <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-50 flex flex-col items-end">
+      {/* Space Explorer AI Panel */}
       {isOpen && (
         <div
           role="dialog"
-          aria-label="Explorer Guide Space Science Assistant"
-          className="mb-3 w-[calc(100vw-2.5rem)] sm:w-96 max-h-[78vh] bg-[#1D1D20] border border-[#95959D]/30 rounded shadow-2xl flex flex-col overflow-hidden"
+          aria-label="Space Explorer AI Chatbot"
+          className="mb-3 w-[calc(100vw-2rem)] sm:w-[400px] max-h-[80vh] bg-[#12141B] border border-[#95959D]/35 rounded-md shadow-2xl flex flex-col overflow-hidden"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-[#000000] border-b border-[#95959D]/20">
-            <div className="flex items-center gap-2.5">
-              <Compass className="w-5 h-5 text-[#4ADE80] shrink-0" />
-              <div>
-                <h2 className="text-sm font-medium text-[#FFFFFF] leading-tight">
-                  Explorer Guide
+          <div className="flex items-center justify-between px-4 py-3 bg-[#07090F] border-b border-[#95959D]/25">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-full bg-[#1C2333] border border-[#4ADE80]/40 flex items-center justify-center shrink-0">
+                <Compass className="w-4 h-4 text-[#4ADE80]" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#FFFFFF] leading-tight tracking-wide">
+                  Space Explorer AI
                 </h2>
-                <p className="text-[11px] text-[#C6C6C9] truncate max-w-[230px]">
-                  Context: {currentArtifact ? currentArtifact.name : currentDest?.name || 'Solar System'}
+                <p className="text-[11px] text-[#C6C6C9] truncate max-w-[240px]">
+                  Astronomy &amp; Missions · {currentArtifact ? currentArtifact.name : currentDest?.name || 'Universe'}
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              aria-label="Minimize Explorer Guide"
-              className="p-1.5 text-[#C6C6C9] hover:text-[#FFFFFF] hover:bg-[#252527] rounded transition-colors cursor-pointer"
+              aria-label="Minimize Space Explorer AI"
+              className="p-1.5 text-[#C6C6C9] hover:text-[#FFFFFF] hover:bg-[#252527] rounded transition-colors cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-3 max-h-80 bg-[#1D1D20]">
+          <div
+            data-testid="space-explorer-messages"
+            className="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-[200px] max-h-80 bg-[#12141B]"
+          >
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -173,21 +203,21 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
                 }`}
               >
                 <div
-                  className={`max-w-[90%] rounded px-3.5 py-2.5 text-xs leading-relaxed ${
+                  className={`max-w-[90%] rounded-md px-3.5 py-2.5 text-xs leading-relaxed ${
                     msg.role === 'user'
                       ? 'bg-[#FFFFFF] text-[#000000] font-medium'
                       : msg.isRefusal
-                      ? 'bg-[#252527] border border-[#B5945B]/60 text-[#EAEAEB]'
-                      : 'bg-[#252527] border border-[#95959D]/20 text-[#EAEAEB]'
+                      ? 'bg-[#1D1F27] border border-[#B5945B]/65 text-[#EAEAEB]'
+                      : 'bg-[#1C1F28] border border-[#95959D]/25 text-[#EAEAEB]'
                   }`}
                 >
                   <p>{msg.text}</p>
 
-                  {/* Official NASA Sources */}
+                  {/* Authoritative Space Sources */}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-[#95959D]/20 space-y-1">
                       <div className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#B5945B]">
-                        Verified NASA Source
+                        Verified Astronomy Source
                       </div>
                       {msg.sources.map((src) => (
                         <a
@@ -219,7 +249,7 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
                               key={art.id}
                               type="button"
                               onClick={() => onSelectArtifact(art.id)}
-                              className="px-2 py-1 text-[11px] bg-[#1D1D20] hover:bg-[#323236] text-[#FFFFFF] border border-[#95959D]/25 rounded transition-colors cursor-pointer text-left"
+                              className="px-2 py-1 text-[11px] bg-[#12141B] hover:bg-[#2B3040] text-[#FFFFFF] border border-[#95959D]/25 rounded transition-colors cursor-pointer text-left"
                             >
                               {art.name.split(' (')[0]}
                             </button>
@@ -233,18 +263,43 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
             ))}
 
             {isLoading && (
-              <div className="text-xs text-[#C6C6C9] font-mono px-2 py-1">
-                Consulting NASA mission archives...
+              <div
+                role="status"
+                aria-live="polite"
+                className="inline-flex items-center gap-2 text-xs text-[#C6C6C9] font-mono px-2.5 py-1.5 rounded bg-[#1C1F28] border border-[#95959D]/20"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#4ADE80]" />
+                <span>Consulting space &amp; mission archives...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Starter Questions */}
-          <div className="px-3.5 py-2 bg-[#000000] border-t border-[#95959D]/20">
+          {errorNotice && (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-2 px-3.5 py-1.5 bg-[#2A1D12] border-t border-[#B5945B]/40 text-[11px] text-[#FDE68A]"
+            >
+              <span className="flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errorNotice}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setErrorNotice(null)}
+                aria-label="Dismiss notice"
+                className="text-[#FDE68A]/80 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Example Space Questions */}
+          <div className="px-3.5 py-2 bg-[#07090F] border-t border-[#95959D]/20">
             <div className="text-[10px] font-mono tracking-[0.14em] uppercase text-[#B5945B] mb-1.5 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-[#4ADE80]" />
-              <span>Starter Mission Questions</span>
+              <span>Example Space Questions</span>
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
               {STARTER_QUESTIONS.map((q) => (
@@ -252,7 +307,7 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
                   key={q}
                   type="button"
                   onClick={() => sendQuestion(q)}
-                  className="px-2.5 py-1 text-[11px] bg-[#252527] hover:bg-[#323236] text-[#EAEAEB] border border-[#95959D]/20 rounded whitespace-nowrap shrink-0 transition-colors cursor-pointer"
+                  className="px-2.5 py-1 text-[11px] bg-[#1C1F28] hover:bg-[#2B3040] text-[#EAEAEB] border border-[#95959D]/25 rounded whitespace-nowrap shrink-0 transition-colors cursor-pointer"
                 >
                   {q}
                 </button>
@@ -263,27 +318,27 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
           {/* Input Form */}
           <form
             onSubmit={handleSubmit}
-            className="flex items-center gap-2 p-3 bg-[#000000] border-t border-[#95959D]/20"
+            className="flex items-center gap-2 p-3 bg-[#07090F] border-t border-[#95959D]/25"
           >
-            <label htmlFor="explorer-guide-input" className="sr-only">
-              Ask Explorer Guide about NASA missions and hardware
+            <label htmlFor="space-explorer-ai-input" className="sr-only">
+              Ask Space Explorer AI any astronomy or space question
             </label>
             <input
-              id="explorer-guide-input"
+              id="space-explorer-ai-input"
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about rovers, missions, or planets..."
-              className="flex-1 bg-[#252527] border border-[#95959D]/30 rounded px-3 py-2 text-xs text-[#FFFFFF] placeholder:text-[#C6C6C9]/60 focus:outline-none focus:border-[#FFFFFF]"
+              placeholder="Ask about planets, telescopes, black holes..."
+              className="flex-1 bg-[#1C1F28] border border-[#95959D]/30 rounded px-3 py-2 text-xs text-[#FFFFFF] placeholder:text-[#C6C6C9]/60 focus:outline-none focus:border-[#4ADE80]"
             />
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              aria-label="Send question to Explorer Guide"
+              aria-label="Send question to Space Explorer AI"
               className="px-3 py-2 bg-[#FFFFFF] hover:bg-[#EAEAEB] disabled:opacity-40 text-[#000000] font-semibold rounded text-xs transition-colors flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>Ask</span>
+              <span>Send</span>
             </button>
           </form>
         </div>
@@ -294,12 +349,12 @@ export const ExplorerGuideChat: React.FC<ExplorerGuideChatProps> = ({
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
-        aria-label="Explorer Guide"
-        className="flex items-center gap-2.5 px-4 py-3 rounded bg-[#252527] hover:bg-[#323236] text-[#FFFFFF] border border-[#95959D]/35 font-medium text-sm shadow-2xl transition-transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
+        aria-label="Space Explorer AI"
+        className="flex items-center gap-2.5 px-4 py-3 rounded-md bg-[#161922] hover:bg-[#222736] text-[#FFFFFF] border border-[#95959D]/40 font-medium text-sm shadow-2xl transition-transform hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
       >
         <span className="w-2 h-2 rounded-full bg-[#4ADE80]" aria-hidden="true" />
-        <MessageSquare className="w-4 h-4 shrink-0 text-[#EAEAEB]" />
-        <span>Explorer Guide</span>
+        <MessageSquare className="w-4 h-4 shrink-0 text-[#4ADE80]" />
+        <span>Space Explorer AI</span>
       </button>
     </div>
   );

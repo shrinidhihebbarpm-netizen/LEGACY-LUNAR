@@ -38,7 +38,8 @@ export interface SolarBodySpec {
   initialAngleRad: number;
   parentId?: 'earth';
   textureUrl?: string;
-  proceduralTextureKind?: 'sun' | 'moon' | 'mars' | 'saturn';
+  modelGlbUrl?: string;
+  proceduralTextureKind?: 'sun' | 'mars';
   hasRings?: 'saturn' | 'uranus';
   atmosphereHex?: string;
   destinationId?: DestinationId;
@@ -193,7 +194,7 @@ export const SOLAR_BODIES: SolarBodySpec[] = [
     eccentricity: 0.02,
     initialAngleRad: 1.15,
     parentId: 'earth',
-    proceduralTextureKind: 'moon',
+    modelGlbUrl: '/models/moon.glb',
     destinationId: 'moon',
     defaultArtifactId: 'apollo-11-eagle-descent',
     distanceLabel: '384,400 km from Earth',
@@ -255,7 +256,7 @@ export const SOLAR_BODIES: SolarBodySpec[] = [
     axialTiltDeg: 26.73,
     eccentricity: 0.04,
     initialAngleRad: 4.15,
-    proceduralTextureKind: 'saturn',
+    modelGlbUrl: '/models/saturn.glb',
     hasRings: 'saturn',
     atmosphereHex: '#f0dfad',
     destinationId: 'saturn',

@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import {
   DEEP_SPACE_PROBES,
   SOLAR_BODIES,
@@ -15,7 +17,6 @@ import {
 } from '../utils/solarSystemSim';
 import {
   createProceduralPlanetTexture,
-  createSaturnRingTexture,
   detectSoftwareGl,
 } from '../utils/proceduralModels';
 
@@ -37,6 +38,7 @@ interface SolarSystemCanvasProps {
   zoomDeltaSignal: { seq: number; factor: number };
   resetViewSignal: number;
   onSimTimeTick: (newMs: number) => void;
+  suspended?: boolean;
 }
 
 const CORONA_VERTEX_SHADER = /* glsl */ `
@@ -63,19 +65,25 @@ const CORONA_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-function buildRingWithRadialUVs(innerR: number, outerR: number, segments = 96): THREE.RingGeometry {
-  const geo = new THREE.RingGeometry(innerR, outerR, segments, 1);
-  const pos = geo.attributes.position;
-  const uv = geo.attributes.uv;
-  const v3 = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v3.fromBufferAttribute(pos, i);
-    const radius = v3.length();
-    const u = (radius - innerR) / Math.max(0.001, outerR - innerR);
-    uv.setXY(i, Math.max(0, Math.min(1, u)), 0.5);
-  }
-  uv.needsUpdate = true;
-  return geo;
+function disposeLoadedObject(root: THREE.Object3D) {
+  root.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) {
+      const mesh = obj as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mats.forEach((mat) => {
+        if (!mat) return;
+        const std = mat as unknown as Record<string, unknown>;
+        for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'alphaMap']) {
+          const tex = std[key];
+          if (tex && typeof (tex as THREE.Texture).dispose === 'function') {
+            (tex as THREE.Texture).dispose();
+          }
+        }
+        mat.dispose();
+      });
+    }
+  });
 }
 
 function buildOrbitEllipsePoints(
@@ -109,6 +117,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
   zoomDeltaSignal,
   resetViewSignal,
   onSimTimeTick,
+  suspended = false,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const labelRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -119,6 +128,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
   const simTimeRef = useRef<number>(simTimeMs);
   const rateRef = useRef<number>(rateSecondsPerSec);
   const pausedRef = useRef<boolean>(paused);
+  const suspendedRef = useRef<boolean>(suspended);
   const lightingRef = useRef<LightingMode>(lightingMode);
   const layersRef = useRef<SolarSystemLayers>(layers);
   const onSimTimeTickRef = useRef(onSimTimeTick);
@@ -150,6 +160,10 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  useEffect(() => {
+    suspendedRef.current = suspended;
+  }, [suspended]);
 
   useEffect(() => {
     lightingRef.current = lightingMode;
@@ -224,8 +238,14 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
     scene.add(floodDirLight);
 
     // Track disposable textures/geometries/materials
+    let unmounted = false;
     const disposables: Array<{ dispose: () => void }> = [envTex];
     const texLoader = new THREE.TextureLoader();
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('/draco/gltf/');
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.setDRACOLoader(dracoLoader);
+    disposables.push(dracoLoader);
 
     // 1. Deep Black Starfield + Galactic Plane Band (InstancedMesh)
     const starCount = 1350;
@@ -295,7 +315,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
       SolarBodyId,
       {
         group: THREE.Group;
-        spinMesh: THREE.Mesh;
+        spinTarget: THREE.Object3D;
         hitMesh: THREE.Mesh;
         selectionHalo: THREE.Mesh;
         orbitLine?: THREE.LineLoop;
@@ -313,41 +333,115 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
       tiltGroup.rotation.z = (spec.axialTiltDeg * Math.PI) / 180;
       group.add(tiltGroup);
 
-      let planetMat: THREE.Material;
-      if (spec.id === 'sun') {
-        const sunTex = createProceduralPlanetTexture('sun', renderer);
-        disposables.push(sunTex);
-        planetMat = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          map: sunTex,
-        });
+      let spinTarget: THREE.Object3D;
+
+      if (spec.modelGlbUrl) {
+        // Dedicated GLB celestial model (e.g. Saturn & Rings /models/saturn.glb)
+        const glbContainer = new THREE.Group();
+        tiltGroup.add(glbContainer);
+        spinTarget = glbContainer;
+
+        gltfLoader.load(
+          spec.modelGlbUrl,
+          (gltf) => {
+            if (unmounted) {
+              disposeLoadedObject(gltf.scene);
+              return;
+            }
+            const modelRoot = gltf.scene;
+            const box = new THREE.Box3().setFromObject(modelRoot);
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+
+            const span =
+              spec.hasRings === 'saturn'
+                ? Math.max(size.x, size.z) || 1
+                : Math.max(size.x, size.y, size.z) || 1;
+            const targetDiameter =
+              spec.hasRings === 'saturn' ? spec.radiusUnits * 4.66 : spec.radiusUnits * 2;
+            const scale = targetDiameter / span;
+
+            modelRoot.scale.setScalar(scale);
+            modelRoot.position.set(
+              -center.x * scale,
+              -center.y * scale,
+              -center.z * scale
+            );
+
+            modelRoot.traverse((obj) => {
+              if ((obj as THREE.Mesh).isMesh) {
+                const mesh = obj as THREE.Mesh;
+                disposables.push(mesh.geometry);
+                const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                mats.forEach((m) => {
+                  if (!m) return;
+                  if (/ring/i.test(mesh.name) || /ring/i.test(m.name) || m.transparent) {
+                    m.side = THREE.DoubleSide;
+                    if (m.transparent) m.depthWrite = false;
+                  }
+                  if ('envMapIntensity' in m) {
+                    (m as THREE.MeshStandardMaterial).envMapIntensity = 0.58;
+                  }
+                  m.needsUpdate = true;
+                  const std = m as unknown as Record<string, unknown>;
+                  for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'alphaMap']) {
+                    const tex = std[key];
+                    if (tex && typeof (tex as THREE.Texture).dispose === 'function') {
+                      disposables.push(tex as THREE.Texture);
+                    }
+                  }
+                  disposables.push(m);
+                });
+              }
+            });
+
+            glbContainer.add(modelRoot);
+          },
+          undefined,
+          (err) => {
+            console.error(`Failed to load GLB for ${spec.name}:`, err);
+          }
+        );
       } else {
-        let mapTex: THREE.Texture | null = null;
-        if (spec.textureUrl) {
-          mapTex = texLoader.load(spec.textureUrl, (loaded) => {
-            loaded.colorSpace = THREE.SRGBColorSpace;
-            loaded.anisotropy = renderer.capabilities.getMaxAnisotropy();
-            loaded.needsUpdate = true;
+        let planetMat: THREE.Material;
+        if (spec.id === 'sun') {
+          const sunTex = createProceduralPlanetTexture('sun', renderer);
+          disposables.push(sunTex);
+          planetMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            map: sunTex,
           });
-          mapTex.colorSpace = THREE.SRGBColorSpace;
-          disposables.push(mapTex);
-        } else if (spec.proceduralTextureKind) {
-          mapTex = createProceduralPlanetTexture(spec.proceduralTextureKind, renderer);
-          disposables.push(mapTex);
+        } else {
+          let mapTex: THREE.Texture | null = null;
+          if (spec.textureUrl) {
+            mapTex = texLoader.load(spec.textureUrl, (loaded) => {
+              loaded.colorSpace = THREE.SRGBColorSpace;
+              loaded.anisotropy = renderer.capabilities.getMaxAnisotropy();
+              loaded.needsUpdate = true;
+            });
+            mapTex.colorSpace = THREE.SRGBColorSpace;
+            disposables.push(mapTex);
+          } else if (spec.proceduralTextureKind) {
+            mapTex = createProceduralPlanetTexture(spec.proceduralTextureKind, renderer);
+            disposables.push(mapTex);
+          }
+
+          planetMat = new THREE.MeshStandardMaterial({
+            color: mapTex ? 0xffffff : spec.orbitColorHex,
+            map: mapTex,
+            roughness: spec.id === 'jupiter' ? 0.68 : 0.78,
+            metalness: 0.06,
+          });
         }
+        disposables.push(planetMat);
 
-        planetMat = new THREE.MeshStandardMaterial({
-          color: mapTex ? 0xffffff : spec.orbitColorHex,
-          map: mapTex,
-          roughness: spec.id === 'jupiter' || spec.id === 'saturn' ? 0.68 : 0.78,
-          metalness: 0.06,
-        });
+        const spinMesh = new THREE.Mesh(sphereGeoShared, planetMat);
+        spinMesh.scale.setScalar(spec.radiusUnits);
+        tiltGroup.add(spinMesh);
+        spinTarget = spinMesh;
       }
-      disposables.push(planetMat);
-
-      const spinMesh = new THREE.Mesh(sphereGeoShared, planetMat);
-      spinMesh.scale.setScalar(spec.radiusUnits);
-      tiltGroup.add(spinMesh);
 
       // Solar Corona Radial Glow Sprite (zero hard sphere edge) or Atmospheric Fresnel Halo
       if (spec.id === 'sun') {
@@ -375,7 +469,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
         coronaSprite.scale.set(spec.radiusUnits * 3.8, spec.radiusUnits * 3.8, 1);
         group.add(coronaSprite);
         disposables.push(glowTex, spriteMat);
-      } else if (spec.atmosphereHex) {
+      } else if (spec.atmosphereHex && !spec.modelGlbUrl) {
         const atmoMat = new THREE.ShaderMaterial({
           uniforms: {
             uColor: { value: new THREE.Color(spec.atmosphereHex) },
@@ -394,23 +488,8 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
         disposables.push(atmoMat);
       }
 
-      // Planetary Ring Systems (Saturn multi-band Cassini rings + Uranus faint ring)
-      if (spec.hasRings === 'saturn') {
-        const ringGeo = buildRingWithRadialUVs(spec.radiusUnits * 1.28, spec.radiusUnits * 2.38, 96);
-        const ringTex = createSaturnRingTexture(renderer);
-        const ringMat = new THREE.MeshStandardMaterial({
-          map: ringTex,
-          transparent: true,
-          side: THREE.DoubleSide,
-          roughness: 0.65,
-          metalness: 0.05,
-          depthWrite: false,
-        });
-        const satRing = new THREE.Mesh(ringGeo, ringMat);
-        satRing.rotation.x = Math.PI / 2;
-        tiltGroup.add(satRing);
-        disposables.push(ringGeo, ringTex, ringMat);
-      } else if (spec.hasRings === 'uranus') {
+      // Planetary Ring Systems for Uranus (Saturn uses its uploaded GLB rings directly)
+      if (spec.hasRings === 'uranus') {
         const uRingGeo = new THREE.RingGeometry(spec.radiusUnits * 1.48, spec.radiusUnits * 1.66, 64);
         const uRingMat = new THREE.MeshBasicMaterial({
           color: 0x99e6f0,
@@ -442,7 +521,14 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
       disposables.push(haloGeo, haloMat);
 
       // Generous invisible click target
-      const hitGeo = new THREE.SphereGeometry(Math.max(spec.radiusUnits * 2.2, 2.2), 10, 10);
+      const hitGeo = new THREE.SphereGeometry(
+        Math.max(
+          spec.hasRings ? spec.radiusUnits * 2.5 : spec.radiusUnits * 2.2,
+          spec.id === 'moon' ? 1.15 : 2.2
+        ),
+        10,
+        10
+      );
       const hitMat = new THREE.MeshBasicMaterial({ visible: false });
       const hitMesh = new THREE.Mesh(hitGeo, hitMat);
       hitMesh.userData.targetId = spec.id;
@@ -469,7 +555,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
       scene.add(group);
       bodyNodes.set(spec.id, {
         group,
-        spinMesh,
+        spinTarget,
         hitMesh,
         selectionHalo,
         orbitLine,
@@ -601,12 +687,12 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
             frameId = window.setTimeout(poll, 5);
           } else {
             if (sync) gl.deleteSync(sync);
-            frameId = window.setTimeout(cb, 75);
+            frameId = window.setTimeout(cb, 120);
           }
         };
         frameId = window.setTimeout(poll, 5);
       } else {
-        frameId = window.setTimeout(cb, 75);
+        frameId = window.setTimeout(cb, 120);
       }
     }
 
@@ -640,6 +726,12 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
     };
 
     function tick() {
+      if (unmounted) return;
+      if (suspendedRef.current) {
+        clock.getDelta();
+        frameId = window.setTimeout(tick, 180);
+        return;
+      }
       const dt = Math.min(clock.getDelta(), 0.1);
       simTimeRef.current = advanceSimTime(
         simTimeRef.current,
@@ -703,7 +795,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
 
         // Axial spin
         if (!pausedRef.current) {
-          node.spinMesh.rotation.y += dt * node.spec.rotationSpeed;
+          node.spinTarget.rotation.y += dt * node.spec.rotationSpeed;
         }
 
         const isSelected = activeTarget === id;
@@ -828,6 +920,7 @@ export const SolarSystemCanvas: React.FC<SolarSystemCanvasProps> = ({
     window.addEventListener('resize', handleResize);
 
     return () => {
+      unmounted = true;
       window.removeEventListener('resize', handleResize);
       renderer.domElement.removeEventListener('mousedown', handlePointerDown);
       renderer.domElement.removeEventListener('click', handlePointerClick);

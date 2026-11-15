@@ -25,6 +25,7 @@ import {
   filterArtifacts,
   getChronologicalTimeline,
   getGhostMissions,
+  getModelIdForSolarTarget,
   type DestinationId,
   type SpaceArtifact,
 } from '../data/spaceData';
@@ -46,6 +47,7 @@ type ActiveSectionTab = 'orrery' | 'timeline' | 'silent-explorers' | 'still-trav
 const FEATURED_STORY_IDS = [
   'apollo-11-eagle-descent',
   'apollo-lunar-rover-lrv',
+  'surveyor-3-lander',
   'opportunity-rover',
   'perseverance-rover',
   'ingenuity-helicopter',
@@ -131,12 +133,16 @@ export const ExplorePage: React.FC = () => {
   });
   const [resetViewSignal, setResetViewSignal] = useState<number>(0);
 
-  const [modelModalOpen, setModelModalOpen] = useState(false);
-  const [modelModalTargetId, setModelModalTargetId] = useState<string | undefined>(undefined);
+  const initialModelParam = searchParams.get('model');
+  const [modelModalOpen, setModelModalOpen] = useState<boolean>(() => Boolean(initialModelParam));
+  const [modelModalTargetId, setModelModalTargetId] = useState<string | undefined>(
+    () => initialModelParam || undefined
+  );
 
   useEffect(() => {
     const destParam = searchParams.get('destination') as DestinationId | null;
     const artParam = searchParams.get('artifact');
+    const modelParam = searchParams.get('model');
 
     if (destParam && DESTINATIONS.some((d) => d.id === destParam)) {
       setSelectedDestinationId(destParam);
@@ -147,6 +153,10 @@ export const ExplorePage: React.FC = () => {
       setSelectedArtifactId(found.id);
       setSelectedDestinationId(found.destinationId);
       setSelectedTargetId(mapDestinationToTarget(found.destinationId));
+    }
+    if (modelParam && NASA_3D_MODELS.some((m) => m.id === modelParam)) {
+      setModelModalTargetId(modelParam);
+      setModelModalOpen(true);
     }
   }, [searchParams]);
 
@@ -233,6 +243,9 @@ export const ExplorePage: React.FC = () => {
     setSelectedTargetId(targetId);
     if (targetId !== 'overview') {
       setInfoDrawerOpen(true);
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        setLeftRailOpen(false);
+      }
     }
 
     const body = SOLAR_BODIES.find((b) => b.id === targetId);
@@ -462,6 +475,7 @@ export const ExplorePage: React.FC = () => {
             zoomDeltaSignal={zoomDeltaSignal}
             resetViewSignal={resetViewSignal}
             onSimTimeTick={setDisplaySimTimeMs}
+            suspended={modelModalOpen}
           />
 
           {/* Top-Left Title matching eyes.nasa.gov/apps/solar-system/#/home */}
@@ -479,7 +493,7 @@ export const ExplorePage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleResetOverview}
-                className="pointer-events-auto ml-2 px-2.5 py-1 text-[11px] font-mono tracking-[0.12em] uppercase bg-[#252527] hover:bg-[#37373a] text-[#eaeaeb] border border-[#95959d]/30 rounded-sm cursor-pointer"
+                className="pointer-events-auto ml-2 px-2.5 py-1 text-[11px] font-mono tracking-[0.12em] uppercase bg-[#252527] hover:bg-[#37373a] text-[#eaeaeb] border border-[#95959d]/30 rounded-sm cursor-pointer whitespace-nowrap shrink-0"
               >
                 ← Overview
               </button>
@@ -577,58 +591,143 @@ export const ExplorePage: React.FC = () => {
 
                       {SOLAR_BODIES.map((body) => {
                         const isActive = selectedTargetId === body.id;
+                        const directModelId = getModelIdForSolarTarget(body.id);
                         return (
-                          <button
+                          <div
                             key={body.id}
-                            type="button"
-                            onClick={() => handleSelect3DTarget(body.id)}
-                            className={`nasa-eyes-card w-full text-left px-3.5 py-2.5 rounded-sm flex items-center justify-between cursor-pointer ${
+                            className={`nasa-eyes-card w-full px-3 py-2 rounded-sm flex items-center justify-between gap-2 ${
                               isActive ? 'active' : ''
                             }`}
                           >
-                            <div className="flex items-center gap-2.5">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full shrink-0"
-                                style={{ backgroundColor: body.orbitColorHex }}
-                              />
-                              <span className="text-xs tracking-[0.16em] uppercase text-[#ffffff]">
-                                {body.name}
+                            <button
+                              type="button"
+                              onClick={() => handleSelect3DTarget(body.id)}
+                              className="flex-1 text-left flex items-center justify-between gap-2 min-w-0 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: body.orbitColorHex }}
+                                />
+                                <span className="text-xs tracking-[0.16em] uppercase text-[#ffffff] truncate">
+                                  {body.name}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-[#c6c6c9] shrink-0">
+                                {body.destinationId ? 'HARDWARE' : body.distanceLabel.split(' ·')[0]}
                               </span>
-                            </div>
-                            <span className="text-[10px] font-mono text-[#c6c6c9]">
-                              {body.destinationId ? 'HARDWARE' : body.distanceLabel.split(' ·')[0]}
-                            </span>
-                          </button>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                open3DModelForArtifact(
+                                  directModelId ?? `coming-soon:${body.name}`
+                                )
+                              }
+                              aria-label={`Open ${body.name} 3D model`}
+                              className="px-1.5 py-0.5 text-[10px] font-mono uppercase bg-[#252527] hover:bg-[#37373a] text-[#47da84] border border-[#37373a] rounded-sm shrink-0 cursor-pointer"
+                            >
+                              3D
+                            </button>
+                          </div>
                         );
                       })}
+
+                      <div className="pt-2 pb-1 px-1 text-[10px] font-mono tracking-[0.18em] uppercase text-[#b5945b]">
+                        Lunar Surface Hardware (Direct 3D)
+                      </div>
+                      {[
+                        { id: 'apollo-lrv-3d', label: 'Apollo Lunar Roving Vehicle', badge: 'LRV' },
+                        { id: 'surveyor-3-3d', label: 'Surveyor 3 Lunar Lander', badge: 'SURV-3' },
+                        { id: 'apollo-descent-model', label: 'Apollo Lunar Module', badge: 'EAGLE' },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => open3DModelForArtifact(item.id)}
+                          aria-label={`Open ${item.label} 3D model`}
+                          className="nasa-eyes-card w-full text-left px-3.5 py-2.5 rounded-sm flex items-center justify-between gap-2 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Box className="w-3.5 h-3.5 text-[#47da84] shrink-0" />
+                            <span className="text-xs tracking-[0.06em] text-[#ffffff] truncate">
+                              {item.label}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-[#47da84] shrink-0">
+                            {item.badge} 3D
+                          </span>
+                        </button>
+                      ))}
+
+                      <div className="pt-2 pb-1 px-1 text-[10px] font-mono tracking-[0.18em] uppercase text-[#b5945b]">
+                        Space Telescopes (Direct 3D)
+                      </div>
+                      {[
+                        { id: 'jwst-3d', label: 'James Webb Telescope', badge: 'JWST' },
+                        { id: 'hubble-3d', label: 'Hubble Space Telescope', badge: 'HST' },
+                      ].map((scope) => (
+                        <button
+                          key={scope.id}
+                          type="button"
+                          onClick={() => open3DModelForArtifact(scope.id)}
+                          aria-label={`Open ${scope.label} 3D model`}
+                          className="nasa-eyes-card w-full text-left px-3.5 py-2.5 rounded-sm flex items-center justify-between gap-2 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Box className="w-3.5 h-3.5 text-[#47da84] shrink-0" />
+                            <span className="text-xs tracking-[0.06em] text-[#ffffff] truncate">
+                              {scope.label}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-[#47da84] shrink-0">
+                            {scope.badge} 3D
+                          </span>
+                        </button>
+                      ))}
 
                       <div className="pt-2 pb-1 px-1 text-[10px] font-mono tracking-[0.18em] uppercase text-[#b5945b]">
                         Deep-Space Spacecraft
                       </div>
                       {DEEP_SPACE_PROBES.map((probe) => {
                         const isActive = selectedTargetId === probe.id;
+                        const directModelId = getModelIdForSolarTarget(probe.id);
                         return (
-                          <button
+                          <div
                             key={probe.id}
-                            type="button"
-                            onClick={() => handleSelect3DTarget(probe.id)}
-                            className={`nasa-eyes-card w-full text-left px-3.5 py-2.5 rounded-sm flex items-center justify-between cursor-pointer ${
+                            className={`nasa-eyes-card w-full px-3 py-2 rounded-sm flex items-center justify-between gap-2 ${
                               isActive ? 'active' : ''
                             }`}
                           >
-                            <div className="flex items-center gap-2.5">
-                              <span
-                                className="w-2 h-2 rotate-45 shrink-0"
-                                style={{ backgroundColor: probe.colorHex }}
-                              />
-                              <span className="text-xs tracking-[0.12em] uppercase text-[#ffffff]">
-                                {probe.name}
+                            <button
+                              type="button"
+                              onClick={() => handleSelect3DTarget(probe.id)}
+                              className="flex-1 text-left flex items-center justify-between gap-2 min-w-0 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span
+                                  className="w-2 h-2 rotate-45 shrink-0"
+                                  style={{ backgroundColor: probe.colorHex }}
+                                />
+                                <span className="text-xs tracking-[0.12em] uppercase text-[#ffffff] truncate">
+                                  {probe.name}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-[#cd9745] shrink-0">
+                                {probe.currentAu} AU
                               </span>
-                            </div>
-                            <span className="text-[10px] font-mono text-[#cd9745]">
-                              {probe.currentAu} AU
-                            </span>
-                          </button>
+                            </button>
+                            {directModelId && (
+                              <button
+                                type="button"
+                                onClick={() => open3DModelForArtifact(directModelId)}
+                                aria-label={`Open ${probe.name} 3D model`}
+                                className="px-1.5 py-0.5 text-[10px] font-mono uppercase bg-[#252527] hover:bg-[#37373a] text-[#47da84] border border-[#37373a] rounded-sm shrink-0 cursor-pointer"
+                              >
+                                3D
+                              </button>
+                            )}
+                          </div>
                         );
                       })}
                     </>
@@ -638,7 +737,12 @@ export const ExplorePage: React.FC = () => {
             ) : (
               <button
                 type="button"
-                onClick={() => setLeftRailOpen(true)}
+                onClick={() => {
+                  setLeftRailOpen(true);
+                  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                    setInfoDrawerOpen(false);
+                  }
+                }}
                 aria-label="Open Featured Hardware Stories Panel"
                 className="pointer-events-auto inline-flex items-center gap-2 px-3 py-2 text-[11px] font-mono tracking-[0.14em] uppercase bg-[#181818]/90 hover:bg-[#252527] text-[#eaeaeb] border border-[#37373a] rounded-sm cursor-pointer"
               >
@@ -690,7 +794,13 @@ export const ExplorePage: React.FC = () => {
                 )}
                 <button
                   type="button"
-                  onClick={() => open3DModelForArtifact(selectedArtifact.model3dId)}
+                  onClick={() => {
+                    const directModelId = getModelIdForSolarTarget(selectedTargetId);
+                    open3DModelForArtifact(
+                      directModelId ?? `coming-soon:${activeTargetDetails.title}`
+                    );
+                  }}
+                  aria-label={`Open ${activeTargetDetails.title} 3D model`}
                   className="px-3 py-2 text-xs font-mono bg-[#252527] hover:bg-[#37373a] text-[#ffffff] border border-[#37373a] rounded-sm cursor-pointer"
                 >
                   3D Model
@@ -998,27 +1108,41 @@ export const ExplorePage: React.FC = () => {
                     {destinationArtifacts.map((art) => {
                       const isSelected = art.id === selectedArtifact.id;
                       return (
-                        <button
+                        <div
                           key={art.id}
-                          type="button"
-                          onClick={() => handleSelectArtifact(art.id, false)}
-                          className={`nasa-eyes-card w-full text-left p-5 rounded-sm cursor-pointer ${
+                          className={`nasa-eyes-card w-full text-left p-5 rounded-sm ${
                             isSelected ? 'active' : ''
                           }`}
                         >
-                          <div className="text-lg font-normal text-[#ffffff] leading-snug">
-                            {art.name}
+                          <button
+                            type="button"
+                            onClick={() => handleSelectArtifact(art.id, false)}
+                            className="w-full text-left cursor-pointer"
+                          >
+                            <div className="text-lg font-normal text-[#ffffff] leading-snug">
+                              {art.name}
+                            </div>
+                            <div className="text-[11px] font-mono tracking-[0.2em] uppercase text-[#b5945b] mt-2">
+                              {art.hardwareType} · {art.arrivalDate}
+                            </div>
+                          </button>
+                          <div className="flex items-center justify-between gap-2 text-xs text-[#c6c6c9] mt-3 pt-2.5 border-t border-[#37373a]">
+                            <span className="truncate max-w-[160px]">{art.mission}</span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className={`font-mono ${getStatusClass(art.status)}`}>
+                                ● {art.status}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => open3DModelForArtifact(art.model3dId)}
+                                aria-label={`Inspect ${art.name} 3D model`}
+                                className="px-2 py-0.5 text-[11px] font-mono text-[#47da84] hover:text-[#ffffff] bg-[#181818] border border-[#37373a] rounded-sm cursor-pointer"
+                              >
+                                3D Model
+                              </button>
+                            </div>
                           </div>
-                          <div className="text-[11px] font-mono tracking-[0.2em] uppercase text-[#b5945b] mt-2">
-                            {art.hardwareType} · {art.arrivalDate}
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-[#c6c6c9] mt-2 pt-2 border-t border-[#37373a]">
-                            <span className="truncate max-w-[220px]">{art.mission}</span>
-                            <span className={`font-mono ${getStatusClass(art.status)}`}>
-                              ● {art.status}
-                            </span>
-                          </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1228,7 +1352,7 @@ export const ExplorePage: React.FC = () => {
                       <p className="text-xs text-[#eaeaeb] leading-relaxed">{item.purpose}</p>
                     </div>
 
-                    <div className="pt-3 border-t border-[#37373a] flex items-center justify-between">
+                    <div className="pt-3 border-t border-[#37373a] flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={() => handleSelectArtifact(item.id, true)}
@@ -1236,15 +1360,24 @@ export const ExplorePage: React.FC = () => {
                       >
                         Inspect in Explorer →
                       </button>
-                      <a
-                        href={item.nasaSourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-[#c6c6c9] hover:text-[#ffffff] inline-flex items-center gap-1"
-                      >
-                        <span>NASA</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => open3DModelForArtifact(item.model3dId)}
+                          className="text-xs font-mono text-[#47da84] hover:text-[#ffffff] cursor-pointer"
+                        >
+                          3D Model
+                        </button>
+                        <a
+                          href={item.nasaSourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-[#c6c6c9] hover:text-[#ffffff] inline-flex items-center gap-1"
+                        >
+                          <span>NASA</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1320,6 +1453,77 @@ export const ExplorePage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* ================================================================
+              DIRECT 3D MODELS GALLERY: TELESCOPES, PLANETS & FLAGSHIP HARDWARE
+              Clicking any card opens that exact 3D model directly in the viewer.
+              ================================================================ */}
+          <section
+            aria-label="Direct 3D Telescopes, Planets and Spacecraft Models"
+            className="border-t border-[#37373a] bg-[#07080C] py-10"
+          >
+            <div className="max-w-7xl w-full mx-auto px-5 sm:px-8 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-[#37373a] pb-4">
+                <div>
+                  <div className="text-[11px] font-mono tracking-[0.2em] uppercase text-[#47da84]">
+                    DIRECT 3D VIEWER · CLICK ANY OBJECT TO INSPECT IN 3D
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-normal text-[#ffffff] mt-1">
+                    Planets, Space Telescopes &amp; Flagship Spacecraft
+                  </h2>
+                </div>
+                <div className="text-xs text-[#c6c6c9]">
+                  Every card launches its exact 3D model immediately
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  'apollo-lrv-3d',
+                  'surveyor-3-3d',
+                  'moon-3d',
+                  'saturn-3d',
+                  'jwst-3d',
+                  'hubble-3d',
+                  'mars-3d',
+                  'jupiter-3d',
+                  'earth-3d',
+                  'voyager-3d',
+                  'perseverance-3d',
+                  'cassini-3d',
+                ]
+                  .map((id) => NASA_3D_MODELS.find((m) => m.id === id))
+                  .filter((m): m is (typeof NASA_3D_MODELS)[number] => Boolean(m))
+                  .map((model) => (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => open3DModelForArtifact(model.id)}
+                      className="nasa-eyes-card text-left p-4 rounded-sm flex flex-col justify-between gap-3 cursor-pointer group"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-mono tracking-[0.14em] uppercase">
+                          <span className="text-[#b5945b]">{model.category}</span>
+                          <span className="text-[#47da84]">
+                            {model.glbUrl ? model.glbSizeLabel || 'GLB 3D' : '3D GLOBE'}
+                          </span>
+                        </div>
+                        <div className="text-sm font-medium text-[#ffffff] group-hover:text-[#47da84] transition-colors">
+                          {model.name}
+                        </div>
+                        <p className="text-xs text-[#c6c6c9] line-clamp-2 leading-relaxed">
+                          {model.missionOrTarget}
+                        </p>
+                      </div>
+                      <div className="pt-2 border-t border-[#37373a] flex items-center justify-between text-[11px] font-mono text-[#eaeaeb]">
+                        <span>Open Direct 3D Model</span>
+                        <Box className="w-3.5 h-3.5 text-[#47da84]" />
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </section>
 
           {/* ================================================================
               GHOST MISSIONS GALLERY — QUIET LEGACY OF RETIRED & DORMANT HARDWARE

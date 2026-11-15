@@ -16,7 +16,7 @@ import {
   formatNasaEyesDateTime,
 } from './solarSystemSim';
 
-test('all 6 NASA equirectangular planet textures exist on disk in public/textures/planets', () => {
+test('all 6 NASA equirectangular planet textures exist on disk in public/textures/planets and Saturn and Moon use GLB models', () => {
   const expectedFiles = ['mercury.webp', 'venus.webp', 'earth.webp', 'jupiter.webp', 'uranus.webp', 'neptune.webp'];
   for (const file of expectedFiles) {
     const fullPath = path.resolve(process.cwd(), 'public', 'textures', 'planets', file);
@@ -24,6 +24,17 @@ test('all 6 NASA equirectangular planet textures exist on disk in public/texture
     const stat = fs.statSync(fullPath);
     assert.ok(stat.size > 2000, `Texture file unexpectedly small: ${fullPath}`);
   }
+  const saturn = SOLAR_BODIES.find((b) => b.id === 'saturn');
+  assert.ok(saturn, 'Saturn body spec must exist');
+  assert.equal(saturn.modelGlbUrl, '/models/saturn.glb');
+  assert.equal(saturn.proceduralTextureKind, undefined);
+  assert.ok(fs.existsSync(path.resolve(process.cwd(), 'public', 'models', 'saturn.glb')));
+
+  const moon = SOLAR_BODIES.find((b) => b.id === 'moon');
+  assert.ok(moon, 'Moon body spec must exist');
+  assert.equal(moon.modelGlbUrl, '/models/moon.glb');
+  assert.equal(moon.proceduralTextureKind, undefined);
+  assert.ok(fs.existsSync(path.resolve(process.cwd(), 'public', 'models', 'moon.glb')));
 });
 
 test('Keplerian orbital speed preserves physical inner-vs-outer planet ratios', () => {

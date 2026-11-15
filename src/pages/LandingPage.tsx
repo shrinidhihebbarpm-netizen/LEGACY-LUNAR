@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ARTIFACTS, type SpaceArtifact } from '../data/spaceData';
+import { ARTIFACTS, NASA_3D_MODELS, type SpaceArtifact } from '../data/spaceData';
 import { ExplorerGuideChat } from '../components/ExplorerGuideChat';
+import { ModelViewerModal } from '../components/ModelViewerModal';
 
 /**
  * Character-by-character rolling hover animation (.roll > .rl > (.rl-a + .rl-b) > .rl-c)
@@ -211,9 +212,9 @@ const FLOATING_FRAGMENTS: FloatingRockFragment[] = [
       'Revealed a fluid lunar core through millimeter-precision laser ranging',
       'Tested Einstein’s Equivalence Principle across five decades',
     ],
-    nasaUrl: 'https://science.nasa.gov/mission/apollo-11/',
+    nasaUrl: 'https://www.nasa.gov/mission/apollo-11/',
     destinationId: 'moon',
-    artifactId: 'apollo-11-descent',
+    artifactId: 'apollo-11-eagle-descent',
     baseAngle: -0.95,
     radiusOffset: 0.28,
     yOffset: -0.14,
@@ -263,7 +264,7 @@ const FLOATING_FRAGMENTS: FloatingRockFragment[] = [
     ],
     nasaUrl: 'https://science.nasa.gov/mission/cassini/',
     destinationId: 'saturn',
-    artifactId: 'huygens-probe',
+    artifactId: 'cassini-huygens',
     baseAngle: 0.38,
     radiusOffset: 0.27,
     yOffset: -0.11,
@@ -288,7 +289,7 @@ const FLOATING_FRAGMENTS: FloatingRockFragment[] = [
     ],
     nasaUrl: 'https://science.nasa.gov/mission/voyager/',
     destinationId: 'deep-space',
-    artifactId: 'voyager-1',
+    artifactId: 'voyager-1-2',
     baseAngle: 0.96,
     radiusOffset: 0.29,
     yOffset: 0.14,
@@ -386,6 +387,15 @@ export function LandingPage() {
 
   // Live UTC Clock in Footer (.so)
   const [utcTime, setUtcTime] = useState<string>('');
+
+  // Direct 3D Model Viewer state (opens exact model clicked without redirecting to generic library)
+  const [modelViewerOpen, setModelViewerOpen] = useState<boolean>(false);
+  const [directModelId, setDirectModelId] = useState<string>('saturn-3d');
+
+  const openDirect3DModel = (modelId: string) => {
+    setDirectModelId(modelId);
+    setModelViewerOpen(true);
+  };
 
   // Mutable ref for 60fps canvas animation loop
   const animStateRef = useRef({
@@ -1113,6 +1123,13 @@ export function LandingPage() {
           </button>
           <button
             type="button"
+            onClick={() => scrollToTarget('direct-3d-objects')}
+            className="jehad-pill-link"
+          >
+            <RollingText text="3D Models" />
+          </button>
+          <button
+            type="button"
             onClick={() => triggerExploreRoute()}
             className="jehad-pill-link"
           >
@@ -1475,6 +1492,90 @@ export function LandingPage() {
           9. Editorial Hardware Chapters & Selected Gallery (Moon, Mars, Deep Space)
           ===================================================================== */}
       <main className="relative z-20 bg-[#050609]">
+        {/* Direct Interactive 3D Models: Saturn, James Webb, Hubble & Solar System Worlds */}
+        <section
+          id="direct-3d-objects"
+          className="border-t border-[rgba(233,231,225,0.12)] px-[var(--col)] py-20"
+          aria-labelledby="direct-3d-heading"
+        >
+          <div className="mx-auto max-w-[1280px]">
+            <div className="flex flex-col justify-between gap-6 border-b border-[rgba(233,231,225,0.14)] pb-8 md:flex-row md:items-end">
+              <div>
+                <div className="text-[11px] tracking-[0.16em] uppercase text-[#b4c8e2]">
+                  00 / DIRECT 3D INSPECTION — CLICK ANY OBJECT TO OPEN ITS 3D MODEL
+                </div>
+                <h2
+                  id="direct-3d-heading"
+                  className="mt-3 text-[clamp(28px,3.4vw,48px)] font-light tracking-[-0.025em] text-[#e9e7e1]"
+                >
+                  Planets, Telescopes, Lunar Landers &amp; Rovers in Direct 3D
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerExploreRoute()}
+                className="jehad-hole-link shrink-0"
+              >
+                <span>Open Full 3D Solar System</span>
+                <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { modelId: 'apollo-lrv-3d', badge: 'ROVER · GLB', accent: '#f59e0b', title: 'Apollo Lunar Roving Vehicle', sub: 'Electric Moon Buggy driven across Apollo 15–17' },
+                { modelId: 'surveyor-3-3d', badge: 'LANDER · GLB', accent: '#e2e8f0', title: 'Surveyor 3 Lunar Lander', sub: '1967 Sea of Storms lander visited by Apollo 12' },
+                { modelId: 'moon-3d', badge: 'MOON · GLB', accent: '#cbd5e1', title: 'Earth’s Moon', sub: 'High-resolution 3D Moon globe & Apollo sites' },
+                { modelId: 'saturn-3d', badge: 'PLANET · GLB', accent: '#facc15', title: 'Saturn & Ring System', sub: 'High-detail 3D Saturn & ice-rock rings' },
+                { modelId: 'jwst-3d', badge: 'TELESCOPE · GLB', accent: '#fbbf24', title: 'James Webb Space Telescope', sub: '6.5m gold mirror & 5-layer sunshield at L2' },
+                { modelId: 'hubble-3d', badge: 'TELESCOPE · GLB', accent: '#38bdf8', title: 'Hubble Space Telescope', sub: '2.4m Low Earth Orbit space observatory' },
+                { modelId: 'mars-3d', badge: 'PLANET · 3D', accent: '#fb923c', title: 'Planet Mars', sub: 'Red Planet topography & rover landing zones' },
+                { modelId: 'jupiter-3d', badge: 'PLANET · GLB', accent: '#f59e0b', title: 'Jupiter', sub: 'Largest gas giant & Great Red Spot' },
+                { modelId: 'earth-3d', badge: 'PLANET · GLB', accent: '#60a5fa', title: 'Planet Earth', sub: 'Blue Marble homeworld & DSN hub' },
+                { modelId: 'voyager-3d', badge: 'PROBE · GLB', accent: '#22d3ee', title: 'Voyager 1 & 2', sub: 'Interstellar probes carrying Golden Record' },
+                { modelId: 'perseverance-3d', badge: 'ROVER · GLB', accent: '#f97316', title: 'Perseverance Mars Rover', sub: 'Nuclear Jezero Crater rover & sample tubes' },
+                { modelId: 'cassini-3d', badge: 'ORBITER · GLB', accent: '#eab308', title: 'Cassini-Huygens', sub: 'Saturn flagship & Huygens Titan lander' },
+              ].map((card) => {
+                const entry = NASA_3D_MODELS.find((m) => m.id === card.modelId);
+                return (
+                  <button
+                    key={card.modelId}
+                    type="button"
+                    data-direct-model-id={card.modelId}
+                    onClick={() => openDirect3DModel(card.modelId)}
+                    className="group flex flex-col justify-between border border-[rgba(233,231,225,0.16)] bg-[rgba(14,16,22,0.78)] p-5 text-left transition-all duration-300 hover:-translate-y-1 hover:border-[#e9e7e1] hover:bg-[rgba(22,26,38,0.94)]"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 text-[10px] tracking-[0.12em] uppercase text-[rgba(233,231,225,0.64)]">
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                          <span
+                            className="inline-block h-2 w-2 rounded-full shrink-0"
+                            style={{ backgroundColor: card.accent }}
+                          />
+                          {card.badge}
+                        </span>
+                        <span className="font-mono text-[9.5px] text-[rgba(233,231,225,0.52)] whitespace-nowrap">
+                          {entry?.glbSizeLabel || 'Interactive 3D'}
+                        </span>
+                      </div>
+                      <h3 className="mt-3 text-[17px] font-normal leading-snug text-[#e9e7e1] group-hover:text-white">
+                        {card.title}
+                      </h3>
+                      <p className="mt-1.5 text-[12.5px] font-light leading-relaxed text-[rgba(233,231,225,0.72)]">
+                        {card.sub}
+                      </p>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-[rgba(233,231,225,0.12)] pt-3 text-[11px] font-medium tracking-[0.12em] uppercase text-[#b4c8e2] group-hover:text-white">
+                      <span>Open 3D Model Directly</span>
+                      <span aria-hidden="true">↗</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         {/* Selected Hardware Spotlight Switcher (.jehad-gal-title animation) */}
         <section
           className="border-t border-[rgba(233,231,225,0.12)] px-[var(--col)] py-24"
@@ -1667,14 +1768,23 @@ export function LandingPage() {
                     <div className="text-[11px] font-light text-[rgba(233,231,225,0.58)]">
                       {art.locationOrTrajectory}
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => triggerExploreRoute('moon', art.id)}
-                        className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e9e7e1] group-hover:underline"
-                      >
-                        <RollingText text="Inspect Artifact →" />
-                      </button>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openDirect3DModel(art.model3dId)}
+                          className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#b4c8e2] hover:text-white"
+                        >
+                          3D Model ↗
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => triggerExploreRoute('moon', art.id)}
+                          className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e9e7e1] group-hover:underline"
+                        >
+                          <RollingText text="In Orrery →" />
+                        </button>
+                      </div>
                       <a
                         href={art.nasaSourceUrl}
                         target="_blank"
@@ -1756,14 +1866,23 @@ export function LandingPage() {
                     <div className="text-[11px] font-light text-[rgba(233,231,225,0.58)]">
                       {art.locationOrTrajectory}
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => triggerExploreRoute('mars', art.id)}
-                        className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e9e7e1] group-hover:underline"
-                      >
-                        <RollingText text="Inspect →" />
-                      </button>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openDirect3DModel(art.model3dId)}
+                          className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e8b89f] hover:text-white"
+                        >
+                          3D Model ↗
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => triggerExploreRoute('mars', art.id)}
+                          className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e9e7e1] group-hover:underline"
+                        >
+                          <RollingText text="In Orrery →" />
+                        </button>
+                      </div>
                       <a
                         href={art.nasaSourceUrl}
                         target="_blank"
@@ -1845,14 +1964,23 @@ export function LandingPage() {
                     <div className="text-[11px] font-light text-[rgba(233,231,225,0.58)]">
                       {art.locationOrTrajectory}
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => triggerExploreRoute(art.destinationId, art.id)}
-                        className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e9e7e1] group-hover:underline"
-                      >
-                        <RollingText text="Inspect Probe →" />
-                      </button>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openDirect3DModel(art.model3dId)}
+                          className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#b4c8e2] hover:text-white"
+                        >
+                          3D Model ↗
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => triggerExploreRoute(art.destinationId, art.id)}
+                          className="text-[11px] font-medium tracking-[0.12em] uppercase text-[#e9e7e1] group-hover:underline"
+                        >
+                          <RollingText text="In Orrery →" />
+                        </button>
+                      </div>
                       <a
                         href={art.nasaSourceUrl}
                         target="_blank"
@@ -1883,7 +2011,7 @@ export function LandingPage() {
           <div className="flex flex-col justify-between gap-6 border-b border-[rgba(22,24,28,0.16)] pb-10 md:flex-row md:items-end">
             <div>
               <div className="text-[11px] font-medium tracking-[0.16em] uppercase text-[rgba(22,24,28,0.62)]">
-                ARCHIVE LEDGER · 13 VERIFIED NASA ARTIFACTS
+                ARCHIVE LEDGER · {ARTIFACTS.length} VERIFIED NASA ARTIFACTS
               </div>
               <h2
                 id="ledger-heading"
@@ -1950,13 +2078,20 @@ export function LandingPage() {
                     {art.status}
                   </span>
                 </div>
-                <div className="flex items-center justify-start gap-5 md:col-span-3 md:justify-end">
+                <div className="flex flex-wrap items-center justify-start gap-4 md:col-span-3 md:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => openDirect3DModel(art.model3dId)}
+                    className="border border-[rgba(22,24,28,0.28)] px-2.5 py-1 text-[10.5px] font-medium tracking-[0.12em] uppercase text-[#16181c] hover:bg-[#16181c] hover:text-[#f1efe9]"
+                  >
+                    3D Model
+                  </button>
                   <button
                     type="button"
                     onClick={() => triggerExploreRoute(art.destinationId, art.id)}
                     className="text-[11.5px] font-medium tracking-[0.12em] uppercase text-[#16181c] underline-offset-4 group-hover:underline"
                   >
-                    <RollingText text="Open in 3D Explorer →" />
+                    <RollingText text="3D Explorer →" />
                   </button>
                   <a
                     href={art.nasaSourceUrl}
@@ -2060,12 +2195,22 @@ export function LandingPage() {
                 </li>
                 <li>
                   <a
-                    href="https://data.nasa.gov/dataset/?tags=3d-model"
+                    href="https://science.nasa.gov/mission/webb/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="so-u"
                   >
-                    NASA Open Data 3D Datasets ↗
+                    NASA James Webb Space Telescope ↗
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://science.nasa.gov/mission/hubble/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="so-u"
+                  >
+                    NASA Hubble Space Telescope Archive ↗
                   </a>
                 </li>
               </ul>
@@ -2248,7 +2393,7 @@ export function LandingPage() {
         </div>
       )}
 
-      {/* Persistent Explorer Guide AI Assistant */}
+      {/* Persistent Space Explorer AI Assistant */}
       <ExplorerGuideChat
         selectedDestinationId="moon"
         selectedArtifactId={selectedGalleryItem.artifactId}
@@ -2256,6 +2401,13 @@ export function LandingPage() {
           const art = ARTIFACTS.find((a) => a.id === artifactId);
           triggerExploreRoute(art?.destinationId, artifactId);
         }}
+      />
+
+      {/* Direct Individual 3D Model Viewer Modal */}
+      <ModelViewerModal
+        isOpen={modelViewerOpen}
+        initialModelId={directModelId}
+        onClose={() => setModelViewerOpen(false)}
       />
     </div>
   );

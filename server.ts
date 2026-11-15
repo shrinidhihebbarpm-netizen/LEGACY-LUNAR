@@ -21,17 +21,19 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Health & API endpoint for Explorer Guide Chatbot
+  // Health & API endpoint for Space Explorer AI Chatbot
   app.post('/api/explorer-guide', async (req, res) => {
     try {
       const {
         question = '',
         destinationId,
         artifactId,
+        history = [],
       }: {
         question?: string;
         destinationId?: DestinationId;
         artifactId?: string;
+        history?: Array<{ role: 'user' | 'assistant'; text: string }>;
       } = req.body || {};
 
       const trimmedQuestion = String(question).trim();
@@ -40,8 +42,17 @@ async function startServer() {
         return;
       }
 
-      // 1. Strict topic pre-check: immediately refuse off-topic requests with the exact required text
-      if (!isSpaceTopicQuery(trimmedQuestion)) {
+      const lastUserTopic = Array.isArray(history)
+        ? [...history].reverse().find((m) => m.role === 'user')?.text
+        : undefined;
+
+      const isFollowUpMore =
+        /\b(more|detail|details|explain further|elaborate|tell me more|continue|why)\b/i.test(
+          trimmedQuestion
+        ) && Boolean(lastUserTopic);
+
+      // 1. Space & astronomy topic pre-check: politely redirect non-space topics
+      if (!isSpaceTopicQuery(trimmedQuestion) && !isFollowUpMore) {
         res.json({
           reply: STRICT_REFUSAL_MESSAGE,
           sources: [],
@@ -59,6 +70,7 @@ async function startServer() {
       const localFallback = buildLocalExplorerGuideAnswer(trimmedQuestion, {
         destinationId,
         artifactId,
+        lastTopicText: lastUserTopic,
       });
 
       const apiKey = process.env.GEMINI_API_KEY;
@@ -83,33 +95,30 @@ async function startServer() {
       });
 
       const contextSummary = selectedArtifact
-        ? `Currently selected destination: ${selectedDest.name}. Currently selected artifact: ${selectedArtifact.name} (${selectedArtifact.mission}, Status: ${selectedArtifact.status}, Location: ${selectedArtifact.locationOrTrajectory}, NASA Source: ${selectedArtifact.nasaSourceUrl}).`
-        : `Currently selected destination: ${selectedDest.name} (${selectedDest.subtitle}, NASA Source: ${selectedDest.nasaUrl}).`;
+        ? `Currently viewed world: ${selectedDest.name}. Currently selected hardware: ${selectedArtifact.name} (${selectedArtifact.mission}, Status: ${selectedArtifact.status}).`
+        : `Currently viewed Solar System region: ${selectedDest.name} (${selectedDest.subtitle}).`;
 
-      const catalogSummary = ARTIFACTS.map(
-        (a) =>
-          `- ${a.name} [id: ${a.id}] (${a.mission}, ${a.destinationId}, Status: ${a.status}): ${a.purpose} Source: ${a.nasaSourceUrl}`
-      ).join('\n');
+      const conversationSnippet = Array.isArray(history) && history.length > 0
+        ? `\nRECENT CONVERSATION:\n${history
+            .slice(-6)
+            .map((m) => `${m.role === 'user' ? 'User' : 'Space Explorer AI'}: ${m.text}`)
+            .join('\n')}`
+        : '';
 
-      const systemInstruction = `You are "Explorer Guide", an educational assistant inside the "Silent Explorers: NASA’s Left-Behind Machines" web application for the NASA Space Apps Challenge.
-Your primary audience is students aged 10–16 and casual space learners.
+      const systemInstruction = `You are "Space Explorer AI", a friendly, knowledgeable space and astronomy educational assistant.
 
-STRICT RULES:
-1. You must ONLY explain the NASA hardware, missions, planets, moons, timelines, and space-science content featured in this experience.
-2. You must NEVER perform general web searches, generate code, write essays/homework/emails/resumes/stories/creative fiction, provide medical/legal/financial/political/personal advice, discuss unrelated topics, control navigation, or pretend to be human.
-3. If the user asks about ANY unrelated subject or asks you to write essays, code, fiction, or non-space content, you MUST respond with this EXACT sentence and nothing else:
-"${STRICT_REFUSAL_MESSAGE}"
-4. Keep valid space-science answers concise (2 to 4 short sentences), friendly, accurate, and easy for ages 10–16 to understand. Define any technical term in plain English.
-5. Clearly distinguish whether hardware is Active, Dormant, Retired, Still Traveling, or at an Impact Site.
+CORE CAPABILITIES & BOUNDARIES:
+1. You answer questions about ANY space or astronomy topic: planets, moons, stars, galaxies, black holes, nebulae, comets, asteroids, rockets, spacecraft, telescopes (including Hubble and James Webb Space Telescope), astronauts, space missions, the Solar System, the Milky Way, exoplanets, cosmology, and the universe.
+2. Keep responses accurate, clear, beginner-friendly, and informative. Never invent facts.
+3. Keep replies concise by default (2 to 4 clear sentences), UNLESS the user asks for more detail / deeper explanation—in which case provide a clear, structured, detailed explanation.
+4. If the user asks a non-space question (unrelated to space, astronomy, astrophysics, aerospace, or space missions), politely explain that you are specialized for space and astronomy questions and offer to answer a space-related question instead (e.g., respond politely like: "${STRICT_REFUSAL_MESSAGE}").
 
-ACTIVE VIEW CONTEXT:
+ACTIVE SITE CONTEXT:
 ${contextSummary}
+${conversationSnippet}`;
 
-FEATURED HARDWARE CATALOG:
-${catalogSummary}`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
+      const geminiPromise = ai.models.generateContent({
+        model: 'gemini-2.5-flash',
         contents: trimmedQuestion,
         config: {
           systemInstruction,
@@ -117,15 +126,25 @@ ${catalogSummary}`;
         },
       });
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini API timeout')), 9500)
+      );
+
+      const response = await Promise.race([geminiPromise, timeoutPromise]);
       const rawText = (response.text ?? '').trim();
       if (!rawText) {
         res.json(localFallback);
         return;
       }
 
-      if (rawText.includes(STRICT_REFUSAL_MESSAGE)) {
+      const lowerRaw = rawText.toLowerCase();
+      const isRefusal =
+        rawText.includes(STRICT_REFUSAL_MESSAGE) ||
+        lowerRaw.includes('specialized for space and astronomy');
+
+      if (isRefusal) {
         res.json({
-          reply: STRICT_REFUSAL_MESSAGE,
+          reply: rawText,
           sources: [],
           relatedArtifacts: [],
           isRefusal: true,
@@ -140,11 +159,14 @@ ${catalogSummary}`;
         isRefusal: false,
       });
     } catch (_err) {
-      // Graceful fallback if API key is unconfigured or network/quota error occurs
-      const { question = '', destinationId, artifactId } = req.body || {};
+      const { question = '', destinationId, artifactId, history = [] } = req.body || {};
+      const lastUserTopic = Array.isArray(history)
+        ? [...history].reverse().find((m: { role: string }) => m.role === 'user')?.text
+        : undefined;
       const fallback = buildLocalExplorerGuideAnswer(String(question), {
         destinationId,
         artifactId,
+        lastTopicText: lastUserTopic,
       });
       res.json(fallback);
     }

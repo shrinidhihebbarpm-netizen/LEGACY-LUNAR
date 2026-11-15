@@ -55,7 +55,7 @@ function fbm2D(x: number, y: number, seed = 1337, octaves = 4): number {
  * Generates high-detail 1024x512 deterministic CanvasTextures for celestial bodies or foil.
  */
 export function createProceduralPlanetTexture(
-  kind: 'sun' | 'moon' | 'mars' | 'jupiter' | 'saturn' | 'icy' | 'kapton',
+  kind: 'sun' | 'mars' | 'jupiter' | 'icy' | 'kapton',
   renderer?: THREE.WebGLRenderer
 ): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -85,38 +85,6 @@ export function createProceduralPlanetTexture(
       }
     }
     ctx.putImageData(imgData, 0, 0);
-  } else if (kind === 'moon') {
-    const imgData = ctx.createImageData(W, H);
-    const data = imgData.data;
-    for (let y = 0; y < H; y++) {
-      const v = y / H;
-      for (let x = 0; x < W; x++) {
-        const u = x / W;
-        const macro = fbm2D(u * 6, v * 3, 41, 4);
-        const detail = fbm2D(u * 26, v * 13, 83, 4);
-        const base = macro < 0.46 ? 96 + detail * 42 : 148 + detail * 68;
-        const val = Math.max(45, Math.min(235, Math.round(base)));
-        const idx = (y * W + x) * 4;
-        data[idx] = val;
-        data[idx + 1] = val;
-        data[idx + 2] = Math.min(242, val + 4);
-        data[idx + 3] = 255;
-      }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    // Crisp lunar craters with soft ejecta rays
-    for (let i = 0; i < 140; i++) {
-      const cx = (seededNoise2D(i, 1, 7) * W) % W;
-      const cy = 36 + seededNoise2D(i, 2, 7) * (H - 72);
-      const r = 3 + seededNoise2D(i, 3, 7) * 18;
-      ctx.strokeStyle = 'rgba(226, 232, 240, 0.36)';
-      ctx.lineWidth = r > 12 ? 1.8 : 1.1;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(42, 46, 54, 0.34)';
-      ctx.fill();
-    }
   } else if (kind === 'mars') {
     const imgData = ctx.createImageData(W, H);
     const data = imgData.data;
@@ -178,30 +146,6 @@ export function createProceduralPlanetTexture(
     ctx.beginPath();
     ctx.ellipse(W * 0.62, H * 0.63, 44, 22, 0, 0, Math.PI * 2);
     ctx.fill();
-  } else if (kind === 'saturn') {
-    const imgData = ctx.createImageData(W, H);
-    const data = imgData.data;
-    for (let y = 0; y < H; y++) {
-      const v = y / H;
-      const polarHex = v < 0.08 || v > 0.92;
-      for (let x = 0; x < W; x++) {
-        const u = x / W;
-        const turb = fbm2D(u * 10, v * 12, 911, 3);
-        const band = 0.5 + 0.35 * Math.sin((v + turb * 0.02) * Math.PI * 18) + 0.15 * Math.cos(v * Math.PI * 34);
-        const idx = (y * W + x) * 4;
-        if (polarHex) {
-          data[idx] = 148;
-          data[idx + 1] = 144;
-          data[idx + 2] = 122;
-        } else {
-          data[idx] = Math.round(182 + band * 56);
-          data[idx + 1] = Math.round(160 + band * 54);
-          data[idx + 2] = Math.round(112 + band * 48);
-        }
-        data[idx + 3] = 255;
-      }
-    }
-    ctx.putImageData(imgData, 0, 0);
   } else if (kind === 'icy') {
     ctx.fillStyle = '#CFFAFE';
     ctx.fillRect(0, 0, W, H);
@@ -248,83 +192,11 @@ export function createProceduralPlanetTexture(
 }
 
 /**
- * Generates radial A / B / C Saturn ring texture with Cassini Division & Encke Gap alpha.
- */
-export function createSaturnRingTexture(renderer?: THREE.WebGLRenderer): THREE.CanvasTexture {
-  const W = 512;
-  const H = 32;
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-  const imgData = ctx.createImageData(W, H);
-  const data = imgData.data;
-
-  for (let x = 0; x < W; x++) {
-    const t = x / (W - 1); // 0 = inner C ring edge, 1 = outer A/F ring edge
-    let alpha = 0;
-    let r = 216;
-    let g = 196;
-    let b = 152;
-
-    if (t > 0.04 && t < 0.22) {
-      // Translucent dusky C Ring
-      alpha = 0.28 * Math.sin(((t - 0.04) / 0.18) * Math.PI);
-      r = 166;
-      g = 152;
-      b = 128;
-    } else if (t >= 0.22 && t < 0.61) {
-      // Bright dense B Ring with fine ringlets
-      const ripple = 0.85 + 0.15 * Math.sin(t * 210);
-      alpha = 0.92 * ripple;
-      r = 228;
-      g = 208;
-      b = 166;
-    } else if (t >= 0.61 && t < 0.67) {
-      // Cassini Division gap
-      alpha = 0.06;
-      r = 90;
-      g = 84;
-      b = 74;
-    } else if (t >= 0.67 && t < 0.94) {
-      // Outer A Ring + Encke Gap near 0.86
-      const encke = t > 0.855 && t < 0.872 ? 0.12 : 1;
-      const ripple = 0.82 + 0.18 * Math.cos(t * 165);
-      alpha = 0.72 * ripple * encke;
-      r = 206;
-      g = 190;
-      b = 156;
-    } else if (t >= 0.97 && t < 0.99) {
-      // Thin F Ring
-      alpha = 0.35;
-    }
-
-    for (let y = 0; y < H; y++) {
-      const idx = (y * W + x) * 4;
-      data[idx] = r;
-      data[idx + 1] = g;
-      data[idx + 2] = b;
-      data[idx + 3] = Math.round(Math.max(0, Math.min(1, alpha)) * 255);
-    }
-  }
-
-  ctx.putImageData(imgData, 0, 0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  if (renderer) {
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  }
-  return texture;
-}
-
-/**
- * Builds composite 5 to 12-part procedural 3D models (`THREE.Group`) for each NASA
- * spacecraft, rover, lander, telescope, or celestial body in the 3D Model Library.
+ * Builds composite 5 to 12-part procedural 3D models (`THREE.Group`) for NASA
+ * celestial bodies & fallback archival entries that do not have a dedicated GLB file.
  */
 export function buildProceduralArtifactGroup(
-  archetype: Nasa3DModelEntry['proceduralArchetype'],
+  archetype: NonNullable<Nasa3DModelEntry['proceduralArchetype']>,
   renderer?: THREE.WebGLRenderer
 ): THREE.Group {
   const group = new THREE.Group();
@@ -364,40 +236,6 @@ export function buildProceduralArtifactGroup(
   });
 
   switch (archetype) {
-    case 'moon-globe': {
-      const moonMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        map: createProceduralPlanetTexture('moon', renderer),
-        roughness: 0.88,
-        metalness: 0.05,
-      });
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(1.75, 32, 32), moonMat);
-      group.add(sphere);
-
-      // Orbital ring & Apollo site markers (6 golden pins)
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(2.25, 0.015, 12, 64),
-        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45 })
-      );
-      ring.rotation.x = Math.PI / 2.3;
-      group.add(ring);
-
-      const apolloCoords = [
-        [0.4, 0.2, 1.68],
-        [-0.5, 0.1, 1.66],
-        [0.2, 0.8, 1.54],
-        [0.6, -0.3, 1.61],
-        [0.8, 0.5, 1.48],
-        [-0.3, 0.6, 1.62],
-      ];
-      apolloCoords.forEach(([x, y, z]) => {
-        const pin = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 12), goldKaptonMat);
-        pin.position.set(x, y, z);
-        group.add(pin);
-      });
-      break;
-    }
-
     case 'apollo-descent': {
       // 1. Octagonal Kapton descent stage body
       const body = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.82, 8), goldKaptonMat);
@@ -808,45 +646,6 @@ export function buildProceduralArtifactGroup(
       break;
     }
 
-    case 'saturn-globe': {
-      const satMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        map: createProceduralPlanetTexture('saturn', renderer),
-        roughness: 0.72,
-        metalness: 0.05,
-      });
-      const saturn = new THREE.Mesh(new THREE.SphereGeometry(1.45, 32, 32), satMat);
-      group.add(saturn);
-
-      // Multi-band Saturn ring system
-      const innerRing = new THREE.Mesh(
-        new THREE.RingGeometry(1.75, 2.35, 64),
-        new THREE.MeshStandardMaterial({
-          color: 0xfde68a,
-          side: THREE.DoubleSide,
-          roughness: 0.55,
-          transparent: true,
-          opacity: 0.88,
-        })
-      );
-      innerRing.rotation.x = Math.PI / 2.25;
-      group.add(innerRing);
-
-      const outerRing = new THREE.Mesh(
-        new THREE.RingGeometry(2.46, 2.95, 64),
-        new THREE.MeshStandardMaterial({
-          color: 0xd97706,
-          side: THREE.DoubleSide,
-          roughness: 0.65,
-          transparent: true,
-          opacity: 0.72,
-        })
-      );
-      outerRing.rotation.x = Math.PI / 2.25;
-      group.add(outerRing);
-      break;
-    }
-
     case 'cassini-orbiter': {
       // 1. Tall cylindrical gold Kapton bus
       const bus = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 1.55, 12), goldKaptonMat);
@@ -998,65 +797,6 @@ export function buildProceduralArtifactGroup(
         plume.position.set((i - 2) * 0.18, -1.95, 0);
         group.add(plume);
       }
-      break;
-    }
-
-    case 'jwst-telescope':
-    case 'hubble-telescope': {
-      // 1. 5-layer diamond-shaped Kapton sunshield base
-      for (let layer = 0; layer < 4; layer++) {
-        const shield = new THREE.Mesh(
-          new THREE.CylinderGeometry(1.75 - layer * 0.06, 1.75 - layer * 0.06, 0.02, 4),
-          layer === 0 ? goldKaptonMat : brushedAluminumMat
-        );
-        shield.position.y = -0.55 + layer * 0.08;
-        shield.scale.set(1.35, 1, 0.85);
-        group.add(shield);
-      }
-
-      // 2. 18-segment hexagonal gold primary mirror array
-      const mirrorGroup = new THREE.Group();
-      mirrorGroup.position.set(0, 0.48, -0.15);
-
-      const hexCoords = [
-        [0, 0],
-        [0, 0.38],
-        [0, -0.38],
-        [0.33, 0.19],
-        [0.33, -0.19],
-        [-0.33, 0.19],
-        [-0.33, -0.19],
-        [0.66, 0],
-        [-0.66, 0],
-        [0.33, 0.57],
-        [-0.33, 0.57],
-        [0.33, -0.57],
-        [-0.33, -0.57],
-      ];
-      hexCoords.forEach(([x, y]) => {
-        const seg = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.18, 0.18, 0.05, 6),
-          new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.95, roughness: 0.1 })
-        );
-        seg.rotation.x = Math.PI / 2;
-        seg.position.set(x, y, 0);
-        mirrorGroup.add(seg);
-      });
-
-      // Secondary mirror tripod struts
-      const secMirror = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.05, 16), goldKaptonMat);
-      secMirror.rotation.x = Math.PI / 2;
-      secMirror.position.set(0, 0, 1.05);
-      mirrorGroup.add(secMirror);
-
-      for (const sx of [-0.55, 0, 0.55]) {
-        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.2, 8), darkCarbonMat);
-        strut.position.set(sx * 0.5, sx === 0 ? 0.35 : -0.25, 0.52);
-        strut.rotation.x = sx === 0 ? -0.55 : 0.45;
-        mirrorGroup.add(strut);
-      }
-
-      group.add(mirrorGroup);
       break;
     }
   }
